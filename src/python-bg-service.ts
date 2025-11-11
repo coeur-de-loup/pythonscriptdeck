@@ -3,6 +3,7 @@ import { PythonServiceSettings } from "./actions/python-service";
 import { ChildProcess, spawn } from "child_process";
 import * as os from "os";
 import * as path from "node:path";
+import * as fs from "fs";
 
 const pythonErrorMap: { [key: string]: string } = {
 	"SyntaxError": "Python\nSyntax\nError",
@@ -161,11 +162,14 @@ class PythonBackgroundService {
 		const normalizedScriptPath = isWindows ? path.win32.normalize(scriptPath) : scriptPath;
 
 		if (useVenv && venvPath) {
+			const normalizedVenvPath = this.normalizeVenvPath(venvPath);
+			streamDeck.logger.info(`Using virtual environment at: ${normalizedVenvPath}`);
+
 			if (isWindows) {
-				const pythonExecutable = path.win32.join(venvPath, "Scripts", "python.exe");
+				const pythonExecutable = path.join(normalizedVenvPath, "Scripts", "python.exe");
 				pythonProcess = spawn(pythonExecutable, [normalizedScriptPath], { windowsHide: true });
 			} else {
-				const pythonExecutable = path.posix.join(venvPath, "bin", "python3");
+				const pythonExecutable = path.join(normalizedVenvPath, "bin", "python3");
 				pythonProcess = spawn(pythonExecutable, [normalizedScriptPath]);
 			}
 		} else {
@@ -181,6 +185,25 @@ class PythonBackgroundService {
 		});
 
 		return pythonProcess;
+	}
+
+	/**
+	 * Normalizes the virtual environment path.
+	 * If the path points to a pyvenv.cfg file, returns its parent directory.
+	 * Otherwise, returns the path as-is.
+	 */
+	normalizeVenvPath(venvPath: string): string {
+		try {
+			// Check if the path points to a file (likely pyvenv.cfg)
+			if (fs.existsSync(venvPath) && fs.statSync(venvPath).isFile()) {
+				// Return the parent directory
+				return path.dirname(venvPath);
+			}
+		} catch (error) {
+			streamDeck.logger.warn(`Could not check venv path: ${error}`);
+		}
+		// If it's already a directory or doesn't exist yet, return as-is
+		return venvPath;
 	}
 
 	createTimer(ev: WillAppearEvent<PythonServiceSettings> | DidReceiveSettingsEvent<PythonServiceSettings> | KeyDownEvent<PythonServiceSettings>) {

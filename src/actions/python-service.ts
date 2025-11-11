@@ -1,5 +1,7 @@
 import streamDeck, { action, DidReceiveSettingsEvent, KeyDownEvent, SingletonAction, WillAppearEvent, WillDisappearEvent } from "@elgato/streamdeck";
 import { pyBGService, ServiceState } from "../python-bg-service";
+import * as path from "node:path";
+import * as fs from "fs";
 
 
 @action({ UUID: "com.nicoohagedorn.pythonscriptdeck.service" })
@@ -16,10 +18,9 @@ export class PythonService extends SingletonAction<PythonServiceSettings> {
 				ev.action.setImage("imgs/actions/pyServiceIcon.png")
 				var venvname = "";
 				if (settings.useVenv && settings.venvPath) {
-					streamDeck.logger.info(settings.venvPath);
-					venvname = settings.venvPath.substring(0, settings.venvPath.lastIndexOf("/"));
-					streamDeck.logger.info(venvname);
-					venvname = venvname.substring(venvname.lastIndexOf("/") + 1, venvname.length) + "\n";
+					const normalizedVenvPath = this.normalizeVenvPath(settings.venvPath);
+					streamDeck.logger.info(`Normalized venv path: ${normalizedVenvPath}`);
+					venvname = path.basename(normalizedVenvPath) + "\n";
 					streamDeck.logger.info(venvname);
 					venvname = `venv:\n ${venvname}`
 
@@ -41,10 +42,9 @@ export class PythonService extends SingletonAction<PythonServiceSettings> {
 				ev.action.setImage("imgs/actions/pyServiceIcon.png")
 				var venvname = "";
 				if (settings.useVenv && settings.venvPath) {
-					streamDeck.logger.info(settings.venvPath);
-					venvname = settings.venvPath.substring(0, settings.venvPath.lastIndexOf("/"));
-					streamDeck.logger.info(venvname);
-					venvname = venvname.substring(venvname.lastIndexOf("/") + 1, venvname.length) + "\n";
+					const normalizedVenvPath = this.normalizeVenvPath(settings.venvPath);
+					streamDeck.logger.info(`Normalized venv path: ${normalizedVenvPath}`);
+					venvname = path.basename(normalizedVenvPath) + "\n";
 					streamDeck.logger.info(venvname);
 					venvname = `venv:\n ${venvname}`
 
@@ -110,6 +110,25 @@ export class PythonService extends SingletonAction<PythonServiceSettings> {
 			}
 		}
 		return undefined;
+	}
+
+	/**
+	 * Normalizes the virtual environment path.
+	 * If the path points to a pyvenv.cfg file, returns its parent directory.
+	 * Otherwise, returns the path as-is.
+	 */
+	normalizeVenvPath(venvPath: string): string {
+		try {
+			// Check if the path points to a file (likely pyvenv.cfg)
+			if (fs.existsSync(venvPath) && fs.statSync(venvPath).isFile()) {
+				// Return the parent directory
+				return path.dirname(venvPath);
+			}
+		} catch (error) {
+			streamDeck.logger.warn(`Could not check venv path: ${error}`);
+		}
+		// If it's already a directory or doesn't exist yet, return as-is
+		return venvPath;
 	}
 }
 

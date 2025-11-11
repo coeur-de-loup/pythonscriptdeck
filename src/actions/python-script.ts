@@ -2,6 +2,7 @@ import streamDeck, { action, DidReceiveSettingsEvent, KeyDownEvent, SingletonAct
 import { ChildProcess, spawn } from "child_process";
 import * as os from "os";
 import * as path from "node:path";
+import * as fs from "fs";
 
 
 
@@ -42,10 +43,9 @@ export class PythonScript extends SingletonAction<PythonScriptSettings> {
 				ev.action.setImage("imgs/actions/gemini_icons/pyFileLoaded.png")
 				var venvname = "";
 				if (settings.useVenv && settings.venvPath) {
-					streamDeck.logger.info(settings.venvPath);
-					venvname = settings.venvPath.substring(0, settings.venvPath.lastIndexOf("/"));
-					streamDeck.logger.info(venvname);
-					venvname = venvname.substring(venvname.lastIndexOf("/") + 1, venvname.length) + "\n";
+					const normalizedVenvPath = this.normalizeVenvPath(settings.venvPath);
+					streamDeck.logger.info(`Normalized venv path: ${normalizedVenvPath}`);
+					venvname = path.basename(normalizedVenvPath) + "\n";
 					streamDeck.logger.info(venvname);
 					venvname = `venv:\n ${venvname}`
 
@@ -60,13 +60,12 @@ export class PythonScript extends SingletonAction<PythonScriptSettings> {
 		const settings = ev.payload.settings;
 		if (settings.path) {
 			if (settings.path.includes(".py")) {
-				
+
 				var venvname = "";
 				if (settings.useVenv && settings.venvPath) {
-					streamDeck.logger.info(settings.venvPath);
-					venvname = settings.venvPath.substring(0, settings.venvPath.lastIndexOf("/"));
-					streamDeck.logger.info(venvname);
-					venvname = venvname.substring(venvname.lastIndexOf("/") + 1, venvname.length) + "\n";
+					const normalizedVenvPath = this.normalizeVenvPath(settings.venvPath);
+					streamDeck.logger.info(`Normalized venv path: ${normalizedVenvPath}`);
+					venvname = path.basename(normalizedVenvPath) + "\n";
 					streamDeck.logger.info(venvname);
 					venvname = `venv:\n ${venvname}`
 					ev.action.setImage("imgs/actions/gemini_icons/pyVirtEnvActive.png")
@@ -145,11 +144,14 @@ export class PythonScript extends SingletonAction<PythonScriptSettings> {
 		const normalizedScriptPath = isWindows ? path.win32.normalize(scriptPath) : scriptPath;
 
 		if (useVenv && venvPath) {
+			const normalizedVenvPath = this.normalizeVenvPath(venvPath);
+			streamDeck.logger.info(`Using virtual environment at: ${normalizedVenvPath}`);
+
 			if (isWindows) {
-				const pythonExecutable = path.win32.join(venvPath, "Scripts", "python.exe");
+				const pythonExecutable = path.join(normalizedVenvPath, "Scripts", "python.exe");
 				pythonProcess = spawn(pythonExecutable, [normalizedScriptPath], { windowsHide: true });
 			} else {
-				const pythonExecutable = path.posix.join(venvPath, "bin", "python3");
+				const pythonExecutable = path.join(normalizedVenvPath, "bin", "python3");
 				pythonProcess = spawn(pythonExecutable, [normalizedScriptPath]);
 			}
 		} else {
@@ -165,6 +167,25 @@ export class PythonScript extends SingletonAction<PythonScriptSettings> {
 		});
 
 		return pythonProcess;
+	}
+
+	/**
+	 * Normalizes the virtual environment path.
+	 * If the path points to a pyvenv.cfg file, returns its parent directory.
+	 * Otherwise, returns the path as-is.
+	 */
+	normalizeVenvPath(venvPath: string): string {
+		try {
+			// Check if the path points to a file (likely pyvenv.cfg)
+			if (fs.existsSync(venvPath) && fs.statSync(venvPath).isFile()) {
+				// Return the parent directory
+				return path.dirname(venvPath);
+			}
+		} catch (error) {
+			streamDeck.logger.warn(`Could not check venv path: ${error}`);
+		}
+		// If it's already a directory or doesn't exist yet, return as-is
+		return venvPath;
 	}
 
 	getFileNameFromPath(path: string): string {
